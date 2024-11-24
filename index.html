@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-LEX Lexer Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+        }
+        textarea, input, button {
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        textarea {
+            height: 150px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>X-LEX: A Simple Lexer Generator</h1>
+        <p>Upload a `.l` file, provide some input text, and generate tokens!</p>
+
+        <!-- File Input -->
+        <label for="fileInput">Upload .l File:</label>
+        <input type="file" id="fileInput" accept=".l">
+
+        <!-- Text Area for Input -->
+        <label for="inputText">Enter Input Text:</label>
+        <textarea id="inputText" placeholder="Enter text to tokenize..."></textarea>
+
+        <!-- Button to Process -->
+        <button id="processBtn">Generate Tokens</button>
+
+        <!-- Output Area -->
+        <h2>Tokens:</h2>
+        <pre id="output" style="background: #f4f4f4; padding: 10px; border: 1px solid #ddd;"></pre>
+    </div>
+
+    <script>
+        // Lexer generator function
+        function generateLexer(definitions, rules) {
+            const patterns = {};
+            definitions.split('\n').forEach(line => {
+                const [name, regex] = line.trim().split(/\s+/);
+                if (name && regex) {
+                    patterns[name] = regex;
+                }
+            });
+
+            const tokenRules = [];
+            rules.split('\n').forEach(line => {
+                const [pattern, action] = line.trim().split(/\s+return\s+/);
+                if (pattern && action) {
+                    const expandedPattern = Object.keys(patterns).reduce((acc, key) => {
+                        return acc.replace(new RegExp(`{${key}}`, 'g'), patterns[key]);
+                    }, pattern);
+                    tokenRules.push({ regex: new RegExp(`^${expandedPattern}`), action: action.trim().replace(/"/g, '') });
+                }
+            });
+
+            return function lexer(input) {
+                const tokens = [];
+                while (input.length > 0) {
+                    let matched = false;
+                    for (const rule of tokenRules) {
+                        const match = input.match(rule.regex);
+                        if (match) {
+                            tokens.push({ type: rule.action, value: match[0] });
+                            input = input.slice(match[0].length).trim();
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        throw new Error(`Unrecognized token at: ${input}`);
+                    }
+                }
+                return tokens;
+            };
+        }
+
+        document.getElementById('processBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('fileInput');
+            const inputText = document.getElementById('inputText').value;
+            const output = document.getElementById('output');
+
+            if (!fileInput.files[0]) {
+                alert('Please upload a .l file first!');
+                return;
+            }
+
+            const fileContent = await fileInput.files[0].text();
+            const [definitions, rules] = fileContent.split('%%').map(section => section.trim());
+
+            try {
+                const lexer = generateLexer(definitions, rules);
+                const tokens = lexer(inputText);
+                output.textContent = JSON.stringify(tokens, null, 2);
+            } catch (err) {
+                output.textContent = `Error: ${err.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
